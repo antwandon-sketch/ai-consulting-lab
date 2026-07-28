@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Skill(claude-api)",
+      "mcp__claude-code-docs__query_docs_filesystem_claude_code_docs",
+      "Bash(/Users/antwandon/ai-consulting-lab/mcp-env/bin/python -c \"import fastmcp; print\\(fastmcp.__version__\\)\")",
+      "Bash(/Users/antwandon/ai-consulting-lab/mcp-env/bin/pip list *)"
+    ]
+  }
+}
