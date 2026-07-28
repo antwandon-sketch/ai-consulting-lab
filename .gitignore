@@ -1,1 +1,4 @@
 .env
+mcp-env/
+__pycache__/
+*.pyc
