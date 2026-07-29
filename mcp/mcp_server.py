@@ -1,4 +1,9 @@
+import sys
+from pathlib import Path
+
 from fastmcp import FastMCP
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agents" / "hvac-dispatch"))
 
 from company_docs import COMPANY_DOCS
 
