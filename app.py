@@ -1,8 +1,10 @@
 import json
 import os
+from datetime import datetime, timezone
 
+import stripe
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, redirect, request
 from anthropic import Anthropic
 
 load_dotenv()
@@ -11,6 +13,12 @@ app = Flask(__name__)
 client = Anthropic()
 
 APP_SECRET_KEY = os.environ["APP_SECRET_KEY"]
+
+STRIPE_SECRET_KEY = os.environ["STRIPE_SECRET_KEY"]
+stripe.api_key = STRIPE_SECRET_KEY
+STRIPE_PRICE_ID = "price_1TyHdI3ziIQD0jW77H5AVAaP"
+
+STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
 
 SYSTEM_PROMPT = """You are a dispatcher for a home services company that handles HVAC, \
 plumbing, electrical, and roofing calls. A transcript of what the caller said will be \
@@ -65,6 +73,98 @@ def qualify_route():
         return jsonify({"error": "Model did not return valid JSON."}), 502
 
     return jsonify(result)
+
+
+@app.route("/book", methods=["POST"])
+def book():
+    if request.headers.get("X-API-Key") != APP_SECRET_KEY:
+        return jsonify({"error": "Missing or invalid X-API-Key header."}), 401
+
+    data = request.get_json(silent=True) or {}
+
+    required_fields = [
+        "job_type",
+        "urgency",
+        "is_emergency",
+        "summary",
+        "suggested_action",
+    ]
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return jsonify(
+            {"error": f"Missing required field(s): {', '.join(missing_fields)}."}
+        ), 400
+
+    caller_number = data.get("caller_number") or ""
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    with open("bookings.log", "a") as f:
+        f.write(
+            f"{timestamp} "
+            f"job_type={data['job_type']} "
+            f"urgency={data['urgency']} "
+            f"is_emergency={data['is_emergency']} "
+            f"summary={data['summary']} "
+            f"suggested_action={data['suggested_action']} "
+            f"caller_number={caller_number}\n"
+        )
+
+    return jsonify({"status": "booked", "message": "Booking logged"})
+
+
+@app.route("/pricing", methods=["GET"])
+def pricing():
+    return """
+    <html>
+      <body>
+        <h1>Pricing</h1>
+        <form action="/create-checkout-session" method="POST">
+          <button type="submit">Subscribe</button>
+        </form>
+      </body>
+    </html>
+    """
+
+
+@app.route("/create-checkout-session", methods=["POST"])
+def create_checkout_session():
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+        success_url="http://127.0.0.1:5001/success",
+        cancel_url="http://127.0.0.1:5001/cancel",
+    )
+    return redirect(session.url)
+
+
+@app.route("/success", methods=["GET"])
+def success():
+    return "Payment successful. Thank you for subscribing!"
+
+
+@app.route("/cancel", methods=["GET"])
+def cancel():
+    return "Checkout was cancelled."
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload = request.get_data()
+    signature = request.headers.get("Stripe-Signature")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, signature, STRIPE_WEBHOOK_SECRET)
+    except (ValueError, stripe.SignatureVerificationError):
+        return jsonify({"error": "Invalid signature."}), 400
+
+    if event["type"] == "checkout.session.completed":
+        session_id = event["data"]["object"]["id"]
+        print(f"Payment confirmed for session {session_id} - activating client")
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with open("payments.log", "a") as f:
+            f.write(f"{timestamp} session_id={session_id}\n")
+
+    return jsonify({"received": True}), 200
 
 
 if __name__ == "__main__":

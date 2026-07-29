@@ -1,5 +1,6 @@
 .env
 mcp-env/
+payments.log
 __pycache__/
 *.pyc
 __pycache__/
