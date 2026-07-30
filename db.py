@@ -1,5 +1,6 @@
 """
-db.py — persistent booking storage, replacing the ephemeral bookings.log file.
+db.py — persistent storage for bookings and payment confirmations, replacing
+ephemeral local log files that Render's free tier wipes on every restart.
 """
 
 import os
@@ -21,7 +22,8 @@ def get_connection():
 
 
 def init_db():
-    """Run once to create the bookings table if it doesn't exist yet."""
+    """Run once (or any time after a schema change) to create tables if they
+    don't already exist. Safe to re-run — never touches existing data."""
     conn = get_connection()
     try:
         with conn.cursor() as cur:
@@ -42,8 +44,16 @@ def init_db():
                     raw_payload JSONB
                 );
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS payments (
+                    id SERIAL PRIMARY KEY,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    session_id TEXT UNIQUE NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'confirmed'
+                );
+            """)
         conn.commit()
-        print("bookings table ready.")
+        print("bookings and payments tables ready.")
     finally:
         conn.close()
 
@@ -77,6 +87,32 @@ def save_booking(data: dict) -> int:
         conn.close()
 
 
+def save_payment(session_id: str):
+    """
+    Records a confirmed Stripe checkout session. Uses ON CONFLICT DO NOTHING
+    because Stripe retries webhook delivery on anything less than a 200
+    response — without this, a retried webhook would silently create a
+    duplicate payment record for the same session_id every time.
+
+    Returns the new row's id, or None if this session_id was already recorded
+    (i.e. this was a Stripe retry of an event we'd already processed).
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO payments (session_id)
+                VALUES (%s)
+                ON CONFLICT (session_id) DO NOTHING
+                RETURNING id;
+            """, (session_id,))
+            row = cur.fetchone()
+        conn.commit()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
 def list_bookings(limit: int = 50):
     conn = get_connection()
     try:
@@ -86,6 +122,21 @@ def list_bookings(limit: int = 50):
                        summary, caller_number, customer_name, service_address,
                        business_name, status
                 FROM bookings
+                ORDER BY created_at DESC
+                LIMIT %s;
+            """, (limit,))
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def list_payments(limit: int = 50):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, created_at, session_id, status
+                FROM payments
                 ORDER BY created_at DESC
                 LIMIT %s;
             """, (limit,))

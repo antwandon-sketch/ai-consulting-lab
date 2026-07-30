@@ -75,7 +75,7 @@ def qualify_route():
     return jsonify(result)
 
 
-from db import save_booking
+from db import save_booking, save_payment
 
 
 @app.route("/book", methods=["POST"])
@@ -161,9 +161,7 @@ def webhook():
     if event["type"] == "checkout.session.completed":
         session_id = event["data"]["object"]["id"]
         print(f"Payment confirmed for session {session_id} - activating client")
-        timestamp = datetime.now(timezone.utc).isoformat()
-        with open("payments.log", "a") as f:
-            f.write(f"{timestamp} session_id={session_id}\n")
+        save_payment(session_id)
 
     return jsonify({"received": True}), 200
 
