@@ -95,9 +95,11 @@ def book():
         "service_address",
         "business_name",
     ]
+    PLACEHOLDER_VALUES = {"unknown", "n/a", "na", "none", "tbd", "pending", "null", "not provided", "not available"}
     missing_fields = [
         field for field in required_fields
         if not str(data.get(field, "")).strip()
+        or str(data.get(field, "")).strip().lower() in PLACEHOLDER_VALUES
     ]
     if missing_fields:
         return jsonify(
