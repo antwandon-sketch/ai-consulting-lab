@@ -75,6 +75,9 @@ def qualify_route():
     return jsonify(result)
 
 
+from db import save_booking
+
+
 @app.route("/book", methods=["POST"])
 def book():
     if request.headers.get("X-API-Key") != APP_SECRET_KEY:
@@ -98,18 +101,10 @@ def book():
     caller_number = data.get("caller_number") or ""
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    with open("bookings.log", "a") as f:
-        f.write(
-            f"{timestamp} "
-            f"job_type={data['job_type']} "
-            f"urgency={data['urgency']} "
-            f"is_emergency={data['is_emergency']} "
-            f"summary={data['summary']} "
-            f"suggested_action={data['suggested_action']} "
-            f"caller_number={caller_number}\n"
-        )
+    data["caller_number"] = caller_number
+    booking_id = save_booking(data)
 
-    return jsonify({"status": "booked", "message": "Booking logged"})
+    return jsonify({"status": "booked", "message": "Booking logged", "booking_id": booking_id})
 
 
 @app.route("/pricing", methods=["GET"])
