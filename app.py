@@ -95,7 +95,10 @@ def book():
         "service_address",
         "business_name",
     ]
-    missing_fields = [field for field in required_fields if field not in data]
+    missing_fields = [
+        field for field in required_fields
+        if not str(data.get(field, "")).strip()
+    ]
     if missing_fields:
         return jsonify(
             {"error": f"Missing required field(s): {', '.join(missing_fields)}."}
