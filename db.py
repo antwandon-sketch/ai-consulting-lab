@@ -1,9 +1,5 @@
 """
 db.py — persistent booking storage, replacing the ephemeral bookings.log file.
-
-Why this exists: Render's free tier wipes local disk on every restart, so both
-bookings.log and a local SQLite file would lose data the same way. This connects
-to a Neon Postgres database instead, which lives outside Render's disk entirely.
 """
 
 import os
@@ -39,6 +35,9 @@ def init_db():
                     summary TEXT,
                     suggested_action TEXT,
                     caller_number TEXT,
+                    customer_name TEXT,
+                    service_address TEXT,
+                    business_name TEXT,
                     status TEXT NOT NULL DEFAULT 'booked',
                     raw_payload JSONB
                 );
@@ -55,8 +54,9 @@ def save_booking(data: dict) -> int:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO bookings
-                    (job_type, urgency, is_emergency, summary, suggested_action, caller_number, raw_payload)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (job_type, urgency, is_emergency, summary, suggested_action,
+                     caller_number, customer_name, service_address, business_name, raw_payload)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
             """, (
                 data.get("job_type"),
@@ -65,6 +65,9 @@ def save_booking(data: dict) -> int:
                 data.get("summary"),
                 data.get("suggested_action"),
                 data.get("caller_number") or "",
+                data.get("customer_name") or "",
+                data.get("service_address") or "",
+                data.get("business_name") or "",
                 Json(data),
             ))
             new_id = cur.fetchone()[0]
@@ -80,7 +83,8 @@ def list_bookings(limit: int = 50):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, created_at, job_type, urgency, is_emergency,
-                       summary, caller_number, status
+                       summary, caller_number, customer_name, service_address,
+                       business_name, status
                 FROM bookings
                 ORDER BY created_at DESC
                 LIMIT %s;
