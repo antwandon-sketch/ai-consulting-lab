@@ -82,3 +82,56 @@
   - Add a Stripe webhook so payment confirmation comes from Stripe directly instead of
     just trusting the /success redirect
   - Week 12: package this build into a case study/demo for outreach
+
+## 2026-07-29 — Outreach Prep: Batches 1 & 2
+
+- Drafted 3 outreach email variants (Lost Revenue / Time-Relief / Competitor Edge hooks),
+  all closing with a direct "reply YES" CTA. Signature format locked: Name / All Rhodes
+  Media / phone / email.
+- Picked Batch 1 (6 businesses) and Batch 2 (6 businesses) from the verified 20-business
+  prospect list, rotating hook variants across each batch.
+- Verified real contact emails for 11 of 12 businesses directly on their own sites/FB
+  pages (not from third-party data brokers). Lantz Home Services has no public email —
+  contact form or phone only.
+- Airco and SALT (both large multi-trade shops) also had no public email — moved to a
+  phone-only outreach list alongside Lantz for Friday's calls.
+- Fully drafted, ready-to-send versions of all 12 emails (no placeholders).
+- Plan: send Batch 1 this afternoon (2026-07-29), follow up with phone calls Friday
+  (2026-07-31), targeting late morning before contractors are off-site for the weekend.
+
+**Next up:** send Batch 1, track replies, call Friday, then move to Batch 2 send.
+
+## 2026-07-29 (late session) — Persistent Storage + New Booking Fields
+
+- Root-caused why bookings.log kept losing data: Render's free tier wipes local
+  disk on every restart — not a bug in the log-writing code itself, the ground
+  it sat on kept getting reset.
+- Migrated booking storage to Neon (free serverless Postgres) — chosen over
+  Supabase specifically because Neon's scale-to-zero resumes instantly, while
+  Supabase free projects fully pause after a week of inactivity.
+- Built db.py (init_db, save_booking, list_bookings) and wired it into app.py's
+  /book route, replacing the file-append entirely.
+- Added three new required fields end-to-end: customer_name, service_address,
+  business_name — updated Retell's create_booking function schema, added
+  descriptions, added a prompt instruction requiring the agent to collect name
+  and address before booking (business_name is a fixed per-agent value, not
+  asked of the caller).
+- Caught and fixed a real validation gap: "required" in Retell's schema only
+  forces a field to be present, not truthful — the backend was checking key
+  presence, not blank values, so a rushed model could've saved an empty name
+  silently. Hardened /book to reject blank/whitespace values the same as
+  missing ones. Verified with two live curl tests (real data succeeds, blank
+  customer_name correctly rejected with a 400).
+- Verified the full loop live end-to-end via Retell Test Audio: agent asked
+  for name + address, called create_booking, booking landed in Neon with all
+  fields populated correctly (booking id 5).
+- Discussed multi-business/multi-trade architecture: one Retell agent + one
+  codebase can serve every client and trade type via dynamic variables and an
+  inbound webhook (per-number lookup), rather than a separate agent per
+  business. Deliberately NOT building the inbound webhook/multi-tenant lookup
+  yet — no second client to justify it. business_name is hardcoded to a
+  placeholder for now.
+
+**Next up:** more test calls to confirm the agent reliably asks for
+name/address every time (one clean pass isn't enough data yet), then revisit
+Retell KYC status for the real phone number.
