@@ -159,3 +159,64 @@ Retell KYC status for the real phone number.
 **Next up:** more voice-call reliability testing (paused for tonight — house
 is quiet, son's asleep), and still waiting on Retell KYC verification for the
 real phone number.
+
+## 2026-07-30 — Repo Polish + Full Credential Rotation
+
+**Repo restructure for code quality/portfolio readiness:**
+- Split `app.py` into blueprints: `routes/dispatch.py` (qualify + booking),
+  `routes/billing.py` (Stripe), with `config.py` centralizing env vars and
+  shared clients. `app.py` is now a slim entry point.
+- Fixed a real bug found in the process: `create_checkout_session` had
+  hardcoded `http://127.0.0.1:5001` redirect URLs — would have sent real
+  customers to an unreachable localhost address in production. Now driven
+  by a `BASE_URL` env var.
+- Added a pytest suite (33 tests, `tests/`) covering `/book` validation,
+  including regression coverage for the `"UNKNOWN"` placeholder incident
+  from this morning. Used the suite to safely verify the blueprint
+  restructure didn't break anything — all 33 passed before and after.
+- Removed `__pycache__` from git tracking (was accidentally committed
+  despite being in `.gitignore`'s intent).
+- Added a public-facing `README.md` — architecture (with a Mermaid diagram,
+  renders natively on GitHub), tech stack, API reference, setup
+  instructions, and testing notes.
+
+**Credential exposure and full rotation:**
+- While drafting the README's example `.env` section, real secret values
+  got manually typed in instead of the placeholder text — these were then
+  visible in a screenshot shared in chat. Separately, a real Neon
+  connection string (with password) got pasted directly into chat text
+  during troubleshooting.
+- Confirmed via `git status` that `README.md` had never been committed, so
+  the exposure never reached GitHub — but treated all values as compromised
+  regardless, since they'd been visible on-screen either way.
+- Rotated all four credentials: `APP_SECRET_KEY`, `STRIPE_SECRET_KEY`,
+  `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL` (Neon password reset — twice,
+  since the first new connection string also got exposed in chat before
+  being finalized).
+- Discovered along the way: there was no permanent Stripe webhook
+  destination pointing at production — only a local CLI listener used for
+  testing. Created a real destination (`havoc-qualifier-api production`)
+  pointed at `https://havoc-qualifier-api.onrender.com/webhook`, subscribed
+  to `checkout.session.completed` — this was a real gap, not just a
+  rotation side-effect.
+- Hit several real snags during rotation, each traced to ground truth rather
+  than guessed at: a `.env` line that ended up blank because a Python
+  `input()` one-liner's prompt text got merged with the actual value during
+  paste; `stripe listen --forward-to` generating its own temporary signing
+  secret separate from the real destination's secret, causing confusing
+  400s that had nothing to do with the rotation itself; and one `.env` line
+  that ended up containing a literal terminal command (`cd
+  ~/ai-consulting-lab`) instead of the actual key value, from a copy-paste
+  mixup.
+- Final state, fully verified: local `pytest` suite still 33/33, a real
+  production booking succeeded end-to-end with the new `APP_SECRET_KEY`
+  (booking id 11), and a real Stripe-triggered webhook returned 200 with the
+  new signing secret and new database password.
+
+**Lesson for next time:** avoid interactive Python `input()` one-liners for
+pasting secrets into `.env` — they're fragile in a way that fails silently
+(blank value saved, no error). Prefer either a direct heredoc/python script
+with the value already embedded, or a plain manual edit in `nano`.
+
+**Next up:** push the now-fixed `README.md` (see below), then continue
+outreach — Batch 2 still queued, 8 prospects not yet batched.
