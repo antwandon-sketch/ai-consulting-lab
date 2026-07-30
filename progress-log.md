@@ -135,3 +135,27 @@
 **Next up:** more test calls to confirm the agent reliably asks for
 name/address every time (one clean pass isn't enough data yet), then revisit
 Retell KYC status for the real phone number.
+
+## 2026-07-29 (continued) — Payments Migrated to Neon Too
+
+- Found the same ephemeral-storage bug in the Stripe webhook route:
+  payments.log was being written to Render's local disk, same failure mode
+  as bookings.log before tonight's fix — caught this by auditing for the
+  pattern elsewhere in app.py rather than assuming one fix covered it.
+- Added a payments table to Neon (via db.py's init_db) and a save_payment()
+  function. Built with ON CONFLICT DO NOTHING on session_id specifically
+  because Stripe retries webhook delivery — this makes repeated webhook
+  deliveries for the same payment a no-op instead of creating duplicates.
+- Patched app.py's /webhook route to call save_payment() instead of writing
+  to payments.log.
+- Verified live with Stripe CLI (stripe listen + stripe trigger
+  checkout.session.completed): multiple webhook deliveries came through
+  (200 on each), but list_payments() correctly shows exactly one row —
+  proving the idempotency logic works under real repeated-delivery
+  conditions, not just in theory.
+- Pushed and deployed to Render — bookings and payments are now both
+  persistent, validated, and handled consistently across the codebase.
+
+**Next up:** more voice-call reliability testing (paused for tonight — house
+is quiet, son's asleep), and still waiting on Retell KYC verification for the
+real phone number.
