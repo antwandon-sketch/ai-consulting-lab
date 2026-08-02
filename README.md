@@ -34,7 +34,7 @@ graph LR
 - **Voice layer:** Retell AI handles real-time telephony and turn-taking; ElevenLabs
   provides the voice. In-call reasoning runs on Claude Sonnet 5 — chosen over Opus
   specifically because voice is latency-sensitive, and Sonnet is more than sufficient
-  for this bounded a qualification task.
+  for this bounded qualification task.
 - **Grounding (RAG):** Business-specific facts (service area, hours, pricing) are
   embedded with Voyage AI and retrieved from a Chroma vector database, so the agent
   answers from real, current policy rather than a static prompt.
@@ -91,6 +91,7 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt   # only needed to run tests
 ```
 
+```bash
 ANTHROPIC_API_KEY=...
 APP_SECRET_KEY=...
 DATABASE_URL=...
@@ -99,6 +100,8 @@ STRIPE_WEBHOOK_SECRET=...
 STRIPE_PRICE_ID=...        # optional — has a default
 BASE_URL=https://havoc-qualifier-api.onrender.com
 PORT=5001 # 5000 is often taken by macOS AirPlay
+```
+
 Create the database tables once:
 
 ```bash
