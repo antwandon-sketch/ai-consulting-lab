@@ -220,3 +220,36 @@ with the value already embedded, or a plain manual edit in `nano`.
 
 **Next up:** push the now-fixed `README.md` (see below), then continue
 outreach — Batch 2 still queued, 8 prospects not yet batched.
+
+## 2026-07-30 (evening) — Credential rotation broke live bookings
+
+- All 4 test calls between 3:03-3:08 PM today failed silently (agent said it booked
+  the appointment, but `create_booking` was actually returning HTTP 401:
+  "Missing or invalid X-API-Key header").
+- Root cause: the full credential rotation done earlier today updated `APP_SECRET_KEY`
+  on Render, but Retell's `create_booking` custom function still had the OLD value
+  hardcoded into its X-API-Key header field. Render and Retell don't share env vars
+  automatically — this header has to be manually updated in Retell any time
+  APP_SECRET_KEY rotates.
+- Fixed by copying the current APP_SECRET_KEY value from Render's Environment tab
+  into the X-API-Key header field on the create_booking function in Retell's agent
+  config. Re-tested at 3:43 PM - call succeeded.
+- Lesson: any future credential rotation must include a check of Retell's custom
+  function headers, not just Render's env vars, or bookings will fail silently
+  (agent still says "you're all set" even when the backend call actually failed).
+- Also noticed: noticeable pause after the agent said "let me get that booked" before
+  confirming - likely Render free tier cold start on the /book endpoint. Investigating
+  actual latency via Retell API call data.
+
+## 2026-08-01 — ANTHROPIC_API_KEY exposure and rotation
+
+- The `ANTHROPIC_API_KEY` value was exposed in a chat session with another agent
+  thread tonight. This is separate from the 2026-07-30 four-credential rotation
+  (`APP_SECRET_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`)
+  documented above — that rotation did not include `ANTHROPIC_API_KEY`.
+- Rotated the key and updated `.env` in this project folder. Confirmed: only one
+  `ANTHROPIC_API_KEY` line present (no duplicates), and the new key authenticates
+  successfully against the Anthropic API.
+- The exposed key was never committed to the repo at any point — confirmed via
+  `git log --all --full-history -- .env`, which returns nothing across all of
+  history. `.env` has never been tracked by git.

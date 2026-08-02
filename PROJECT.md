@@ -192,6 +192,13 @@ review quotes that don't actually exist (see lesson below).
   names/phone numbers are lower-risk to verify (via Google Places) than quoted text.
 - **MCP's Python SDK needs Python 3.10+** — required setting up a separate `mcp-env`
   venv since system Python was 3.9.6.
+- **A pushed fix isn't a deployed fix.** Confirmed the hard way: `git push` succeeded
+  and GitHub had the correct code, but Render's auto-deploy silently didn't trigger,
+  so production kept serving old code for a while (a fix meant to reject placeholder
+  values like "UNKNOWN" kept accepting them in production, despite testing clean
+  locally). After any push meant to fix something real, check Render's Logs tab for
+  a fresh "Deploying..." entry before trusting it's live — if it's missing, use the
+  Manual Deploy button rather than assuming the push alone was enough.
 
 ---
 
@@ -223,3 +230,11 @@ agent, when that resumes), define up front:
 2. **Does it reuse the existing API** or need new endpoints?
 3. **Where does it live** in the repo?
 4. **Is it a sellable module** (goes in the upsell stack) or internal tooling?
+
+## Session Wrap-Up Convention
+
+At the end of each work session, Claude gives a 2-3 sentence "story" summary of
+what was built or fixed — phrased so it can be repeated to an employer or
+colleague, not just a technical changelog entry. Goal: build up a stack of
+these over time as practice material for interviews and technical conversations,
+and build comfort with industry terminology along the way.
