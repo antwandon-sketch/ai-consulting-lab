@@ -3,14 +3,30 @@ routes/dispatch.py — call qualification and booking endpoints.
 """
 
 import json
+import logging
+import smtplib
+import threading
+from email.message import EmailMessage
 from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from config import APP_SECRET_KEY, anthropic_client
+from config import (
+    APP_SECRET_KEY,
+    OWNER_NOTIFY_EMAIL,
+    SMTP_PASSWORD,
+    SMTP_USER,
+    anthropic_client,
+)
 from db import save_booking
 
+logger = logging.getLogger(__name__)
+
 dispatch_bp = Blueprint("dispatch", __name__)
+
+# Gmail account the owner-notification email is sent from (see notify_owner
+# below). Must match the account SMTP_USER/SMTP_PASSWORD authenticate as.
+NOTIFY_SENDER_EMAIL = "allrhodesmedia@gmail.com"
 
 SYSTEM_PROMPT = """You are a dispatcher for a home services company that handles HVAC, \
 plumbing, electrical, and roofing calls. A transcript of what the caller said will be \
@@ -72,6 +88,79 @@ def _check_api_key() -> bool:
     return request.headers.get("X-API-Key") == APP_SECRET_KEY
 
 
+def _build_notification_email(data: dict[str, Any], booking_id: int) -> EmailMessage:
+    is_emergency = str(data.get("is_emergency", "")).strip().lower() == "true"
+    subject_prefix = "EMERGENCY: " if is_emergency else ""
+    subject = (
+        f"{subject_prefix}New booking — "
+        f"{data.get('job_type', '')} for {data.get('customer_name', '')}"
+    )
+
+    body = "\n".join([
+        f"Booking ID: {booking_id}",
+        f"Business: {data.get('business_name', '')}",
+        f"Customer: {data.get('customer_name', '')}",
+        f"Service address: {data.get('service_address', '')}",
+        f"Job type: {data.get('job_type', '')}",
+        f"Urgency: {data.get('urgency', '')}",
+        f"Emergency: {data.get('is_emergency', '')}",
+        f"Summary: {data.get('summary', '')}",
+        f"Suggested action: {data.get('suggested_action', '')}",
+    ])
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = NOTIFY_SENDER_EMAIL
+    message["To"] = OWNER_NOTIFY_EMAIL
+    message.set_content(body)
+    return message
+
+
+def _send_booking_notification_email(data: dict[str, Any], booking_id: int) -> None:
+    """
+    Sends the owner-notification email synchronously over Gmail's SMTP.
+    Always called off the request thread (see notify_owner) so SMTP latency
+    never delays the /book response Retell is waiting on during a live call.
+    """
+    message = _build_notification_email(data, booking_id)
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as smtp:
+        smtp.login(SMTP_USER, SMTP_PASSWORD)
+        smtp.send_message(message)
+
+
+def _run_in_background(fn) -> None:
+    threading.Thread(target=fn, daemon=True).start()
+
+
+def notify_owner(data: dict[str, Any], booking_id: int) -> None:
+    """
+    Fire-and-forget owner notification for a successful booking, so this
+    product works against any client's scheduling software without a
+    custom integration. Runs off the request thread and never raises: a
+    notification problem (missing config, SMTP failure) is logged and
+    swallowed rather than allowed to break a booking that already saved
+    successfully.
+    """
+    if not (OWNER_NOTIFY_EMAIL and SMTP_USER and SMTP_PASSWORD):
+        logger.warning(
+            "Skipping owner notification email for booking %s: "
+            "OWNER_NOTIFY_EMAIL, SMTP_USER, or SMTP_PASSWORD is not set.",
+            booking_id,
+        )
+        return
+
+    def _send():
+        try:
+            _send_booking_notification_email(data, booking_id)
+        except Exception:
+            logger.exception(
+                "Failed to send owner notification email for booking %s.",
+                booking_id,
+            )
+
+    _run_in_background(_send)
+
+
 @dispatch_bp.route("/", methods=["GET"])
 def index():
     """Basic health check — confirms the API is up."""
@@ -131,5 +220,7 @@ def book():
 
     data["caller_number"] = data.get("caller_number") or ""
     booking_id = save_booking(data)
+
+    notify_owner(data, booking_id)
 
     return jsonify({"status": "booked", "message": "Booking logged", "booking_id": booking_id})

@@ -100,6 +100,9 @@ STRIPE_WEBHOOK_SECRET=...
 STRIPE_PRICE_ID=...        # optional — has a default
 BASE_URL=https://havoc-qualifier-api.onrender.com
 PORT=5001 # 5000 is often taken by macOS AirPlay
+OWNER_NOTIFY_EMAIL=...     # optional — business owner address notified on each booking
+SMTP_USER=...              # optional — Gmail address used to send that notification
+SMTP_PASSWORD=...          # optional — Gmail app password for SMTP_USER
 ```
 
 Create the database tables once:
